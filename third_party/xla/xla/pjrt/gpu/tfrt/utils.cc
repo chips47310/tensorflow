@@ -962,19 +962,43 @@ absl::flat_hash_map<GlobalDeviceId, IncarnationId> GetLatestIncarnations(
   return device_incarnations;
 }
 
-absl::Status BlockHostUntilDoneWithHostCallback(se::Stream* stream) {
-  absl::Notification event;
-
+absl::Status BlockHostUntilDoneWithHostCallback(se::Stream* stream,
+                                                absl::Duration timeout) {
+  // We may return an error if the stream is in an error state.
+  // The host callback will not get scheduled in that case however the enqueued
+  // method will have a dangling reference to the event. To avoid this we use a
+  // shared pointer to the event.
+  auto event = std::make_shared<absl::Notification>();
   tsl::profiler::TraceMe traceme("BlockHostUntilDoneWithHostCallback");
-  auto status = stream->DoHostCallback([&event]() {
+  TF_RETURN_IF_ERROR(stream->DoHostCallback([event]() {
     tsl::profiler::TraceMe traceme(
         "BlockHostUntilDoneWithHostCallback::Callback");
-    event.Notify();
-  });
+    event->Notify();
+  }));
 
-  event.WaitForNotification();
-
-  return status;
+  bool was_notified = false;
+  do {
+    // Host callback may not get scheduled if the stream goes into an error
+    // state such as with an illegal memory access.
+    // Consequently, we wait for a finite time and query the stream status (if
+    // possible) to avoid waiting indefinitely.
+    was_notified = event->WaitForNotificationWithTimeout(timeout);
+    if (!was_notified) {
+      XLA_VLOG_DEVICE(3, stream->parent()->device_ordinal())
+          << "BlockHostUntilDoneWithHostCallback::WaitForNotification "
+             "timed out after "
+          << timeout << ". Querying stream status.";
+      // If timed out lets query the stream status and decide whether to keep
+      // waiting or return an error.
+      // NB: Not all stream implementations implement RefreshStatus.
+      // We treat UnimplementedError as a signal to keep waiting.
+      if (auto stream_status = stream->RefreshStatus();
+          !stream_status.ok() && !absl::IsUnimplemented(stream_status)) {
+        return stream_status;
+      }
+    }
+  } while (!was_notified);
+  return absl::OkStatus();
 }
 
 }  // namespace xla
