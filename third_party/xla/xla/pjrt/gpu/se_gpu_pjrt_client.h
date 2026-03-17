@@ -73,6 +73,26 @@ using DeviceTopologyPair =
 
 class StreamExecutorGpuDevice : public PjRtStreamExecutorDevice {
  public:
+  // Constructs a StreamExecutorGpuDevice.
+  //
+  // Parameters:
+  //   id: Global device ordinal (used as the PjRt device id).
+  //   local_device_state: Owning pointer to the local device state (streams,
+  //     allocator, etc.). May be null for remote (non-addressable) devices.
+  //   device_kind: Human-readable device name (e.g. "NVIDIA A100-SXM4-80GB").
+  //   device_vendor: GPU vendor string (e.g. "NVIDIA Corporation").
+  //   compute_capability: Device compute capability string
+  //     (e.g. "8.0" for Ampere).
+  //   core_count: Number of streaming multiprocessors on the device.
+  //   shared_memory_per_block_optin: Maximum shared memory per block in bytes
+  //     when using the opt-in mechanism.
+  //   local_device_id: Local ordinal of the device within this process.
+  //   process_index: Global index of the process that owns this device.
+  //   process_index_in_partition: Index of the owning process within its
+  //     partition (used for multi-partition topologies).
+  //   partition_index: Index of the partition this device belongs to.
+  //   numa_node: NUMA node affinity of the device, or
+  //     tsl::port::kNUMANoAffinity if unknown.
   StreamExecutorGpuDevice(int id,
                           std::unique_ptr<LocalDeviceState> local_device_state,
                           std::string device_kind, std::string device_vendor,
