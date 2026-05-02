@@ -1,0 +1,40 @@
+name: "Copilot Setup Steps"
+
+# Run when this file is changed, or manually via the Actions tab.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bazel
+        uses: bazel-contrib/setup-bazel@0.9.0
+        with:
+          # Use the version pinned in .bazelversion
+          bazel-version: "7.7.0"
+          # Cache Bazel's downloaded artifacts so the agent starts faster
+          disk-cache: true
+          repository-cache: true
+
+      - name: Install Python development dependencies
+        run: pip install --require-hashes -r requirements_lock_3_12.txt
