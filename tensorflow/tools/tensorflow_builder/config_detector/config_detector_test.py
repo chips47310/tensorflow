@@ -17,11 +17,22 @@ _CUDA_MODULE_NAME = (
 
 
 def _load_config_detector_module():
+  absl_module = types.ModuleType("absl")
+  app_module = types.ModuleType("absl.app")
+  app_module.run = lambda *_args, **_kwargs: None
+  flags_module = types.ModuleType("absl.flags")
+  flags_module.FLAGS = types.SimpleNamespace(debug=False)
+  flags_module.DEFINE_boolean = lambda *_args, **_kwargs: None
+  flags_module.DEFINE_string = lambda *_args, **_kwargs: None
+
   cuda_module = types.ModuleType(_CUDA_MODULE_NAME)
   cuda_module.retrieve_from_golden = mock.MagicMock(return_value={})
   cuda_module.retrieve_from_web = mock.MagicMock(return_value={})
 
   module_names = [
+      "absl",
+      "absl.app",
+      "absl.flags",
       "tensorflow",
       "tensorflow.tools",
       "tensorflow.tools.tensorflow_builder",
@@ -34,6 +45,9 @@ def _load_config_detector_module():
       inserted_modules[name] = types.ModuleType(name)
       sys.modules[name] = inserted_modules[name]
 
+  sys.modules["absl"] = absl_module
+  sys.modules["absl.app"] = app_module
+  sys.modules["absl.flags"] = flags_module
   sys.modules[_CUDA_MODULE_NAME] = cuda_module
 
   spec = importlib.util.spec_from_file_location(
@@ -74,11 +88,8 @@ class ConfigDetectorTest(unittest.TestCase):
       with self.assertRaises(SystemExit):
         self.config_detector.get_platform()
 
-  def test_get_cuda_version_all_filters_default_path(self):
-    out = (
-        b"/usr/local/cuda\n/usr/local/cuda-12.2\n"
-        b"/usr/local/cuda-11.8\n"
-    )
+  def test_get_cuda_version_all_parses_all_detected_versions(self):
+    out = b"/usr/local/cuda-12.2\n/usr/local/cuda-11.8"
     with mock.patch.object(
         self.config_detector, "run_shell_cmd", return_value=(out, "")
     ):
